@@ -31,8 +31,8 @@ jobs:
 
       # If your repo does NOT have the /windows folder yet,
       # uncomment the next step to generate it.
-      # - name: Create Windows platform files
-      #   run: flutter create .
+      - name: Create Windows platform files
+        run: flutter create .
 
       - name: Build Windows (Release)
         run: flutter build windows --release
