@@ -37,6 +37,64 @@ jobs:
       - name: Build Windows (Release)
         run: flutter build windows --release
 
+      - name: Download VC++ Redistributables
+        run: |
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+
+      - name: Setup Inno Setup
+        run: |
+          choco install innosetup
+
+      - name: Create Inno Setup Script
+        shell: pwsh
+        run: |
+          $issContent = @"
+          [Setup]
+          AppName=SHGHS Feedback
+          AppVersion=1.0
+          DefaultDirName={pf}\SHGHS Feedback
+          DefaultGroupName=SHGHS Feedback
+          OutputDir=.
+          OutputBaseFilename=SHGHS_Feedback_Installer
+          Compression=lzma
+          SolidCompression=yes
+          PrivilegesRequired=admin
+
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+
+          [Tasks]
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+          [Files]
+          Source: "build/windows/x64/runner/Release/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          Source: "vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+
+          [Icons]
+          Name: "{group}\SHGHS Feedback"; Filename: "{app}\SHGHS Feedback.exe"
+          Name: "{commondesktop}\SHGHS Feedback"; Filename: "{app}\SHGHS Feedback.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/quiet /norestart"; StatusMsg: "Installing Visual C++ Redistributables..."; Flags: runhidden
+          Filename: "{app}\SHGHS Feedback.exe"; Description: "{cm:LaunchProgram,SHGHS Feedback}"; Flags: nowait postinstall skipifsilent
+
+          [Code]
+          function InitializeSetup(): Boolean;
+          begin
+            // Check if VC++ Redistributables are installed
+            if not RegKeyExists(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64') then
+            begin
+              MsgBox('Visual C++ Redistributables are required and will be installed automatically.', mbInformation, MB_OK);
+            end;
+            Result := True;
+          end;
+          "@
+          $issContent | Out-File -FilePath "installer.iss" -Encoding UTF8
+
+      - name: Build Installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
       - name: Zip build output
         shell: pwsh
         run: |
@@ -45,8 +103,14 @@ jobs:
           if (Test-Path $dst) { Remove-Item $dst }
           Compress-Archive -Path "$src/*" -DestinationPath $dst
 
-      - name: Upload artifact
+      - name: Upload artifact (ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: windows-release
+          name: windows-release-zip
           path: windows-release.zip
+
+      - name: Upload artifact (Installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: SHGHS_Feedback_Installer.exe
